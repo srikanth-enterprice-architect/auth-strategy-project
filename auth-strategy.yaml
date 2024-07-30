@@ -1,0 +1,33 @@
+id: Auth Strategy
+name: Auth Strategy
+description: Accept Multile Auth Methods
+category: Custom
+type: custom
+resourceLevelSupported: true
+encryptionSupported: false
+standalone: true
+requiredCharacteristics: []
+providedCharacteristics: []
+configuration:
+   - propertyName: evaluateRequestHeader
+     name: Evaluate Request Header
+     description: Based on The condition, AUTH Method Evaluated.
+     type: boolean     
+     optional: true
+     defaultValue: false
+
+   - propertyName: evaluateEnvAuthStrategy
+     name: Environment Auth Strategy
+     description: Based on The Environment Selection, Specific Properties Applied.
+     options:
+      - name: TEST
+        value: "test"  
+      - name: ACC
+        value: "acc"
+      - name: PRD
+        value: "prd"
+     type: radio
+     defaultValue: TEST
+     optional: true
+     sensitive: false
+     allowMultiple: false

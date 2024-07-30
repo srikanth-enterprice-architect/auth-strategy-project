@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+	xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:http-policy="http://www.mulesoft.org/schema/mule/http-policy"
+	xmlns:http-transform="http://www.mulesoft.org/schema/mule/http-policy-transform" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+               http://www.mulesoft.org/schema/mule/http-policy http://www.mulesoft.org/schema/mule/http-policy/current/mule-http-policy.xsd
+               http://www.mulesoft.org/schema/mule/http-policy-transform http://www.mulesoft.org/schema/mule/http-policy-transform/current/mule-http-policy-transform.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+
+
+
+	
+	<http-policy:proxy
+		name="{{{policyId}}}-custom-policy">
+		<http-policy:source>
+			{{#if evaluateRequestHeader}}
+			<choice>
+				<when
+					expression="#[attributes.headers['Authorization'] contains 'Basic']">
+					<flow-ref name="templateSub_Flow" />
+					<http-policy:execute-next />
+				</when>
+				<otherwise>
+					<http-policy:execute-next />
+					<logger level="INFO" doc:name="Logger"
+						doc:id="0d70b0be-82e5-4d8c-a885-8a52d64af123"
+						message="Police Execution is complited" />
+				</otherwise>
+			</choice>
+			{{else}}
+			<logger level="INFO" doc:name="Logger"
+				doc:id="10f6e7b8-a08f-4c27-82f8-c19773fbc479"
+				message="Auth Method is not Avalible" />
+			{{/if}}
+		</http-policy:source>
+	</http-policy:proxy>
+
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="3c85d9fd-04e9-45f1-ba43-f344a0fca147"
+		file="config-{{{evaluateEnvAuthStrategy}}}.yaml" />
+
+	<secure-properties:config
+		name="Secure_Properties_Config" doc:name="Secure Properties Config"
+		doc:id="98d2a033-c694-4eb1-95cc-225e8c930fe4"
+		file="secure-config.properties" key="123456">
+		<secure-properties:encrypt
+			algorithm="Blowfish" />
+	</secure-properties:config>
+
+	<!-- <secure-properties:config name="Secure_Properties_Config" doc:name="Secure 
+		Properties Config" doc:id="477a1143-14e8-45ef-b911-8d6efd7afeac" file="properties\secure-config-{{{evaluateEnvAuthStrategy}}}.properties" 
+		key="123456" > <secure-properties:encrypt algorithm="Blowfish" /> </secure-properties:config> -->
+
+	<http:request-config name="client_auth_basic"
+		doc:name="HTTP Request configuration"
+		doc:id="4ea5ac0e-0c00-405b-b8fc-42684ddde497">
+		<http:request-connection
+			connectionIdleTimeout="50000">
+			<http:authentication>
+				<http:basic-authentication
+					username='${secure::ma.{{{evaluateEnvAuthStrategy}}}.uname}'
+					password='${secure::ma.{{{evaluateEnvAuthStrategy}}}.pword}' />
+				<!-- <http:basic-authentication username='sri' password='sri'/> -->
+			</http:authentication>
+		</http:request-connection>
+	</http:request-config>
+
+	<global-property doc:name="Global Property"
+		doc:id="e651bba8-72fe-4228-ad22-e9d9c61a4240" name="env"
+		value="{{{evaluateEnvAuthStrategy}}}" />
+	<sub-flow name="templateSub_Flow"
+		doc:id="5b818996-bc3b-4c20-81ab-c134b0b5ee3f">
+		<ee:transform doc:name="User Auth Decode"
+			doc:id="a68011db-20f2-42cb-b6dc-4c00232fa450">
+			<ee:message />
+
+			<ee:variables>
+				<ee:set-variable variableName="user_input_auth"><![CDATA[%dw 2.0
+				import * from dw::core::Binaries
+				output application/json				
+				---
+				(fromBase64((attributes.headers.authorization splitBy ' ')[1])) splitBy(":")]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger"
+			doc:id="4cfdc10a-48a1-4229-8194-24e146cba09a"
+			message='#[%dw 2.0&#10;import p from Mule&#10;output application/json&#10;---&#10;{	&#10;	"target-sys-url": p("ma.auth_link"),&#10;	"username" : vars.user_input_auth[0],&#10;	"env": p("env"),&#10;	secure_uname: p("secure::ma.{{{evaluateEnvAuthStrategy}}}.uname"),&#10;}]' />
+		<http:request method="POST" doc:name="Auth Server"
+			doc:id="dea3dce6-ab79-477a-a03e-b9d3fdb09a07"
+			url="${ma.auth_link}" config-ref="client_auth_basic"
+			followRedirects="true" responseTimeout="90000">
+			<http:query-params><![CDATA[#[output application/java
+				---
+				{
+					"username" : "vars.user_input_auth[0]",
+					"password" : "vars.user_input_auth[1]"
+				}]]]></http:query-params>
+		</http:request>
+
+		<logger level="INFO" doc:name="Logger"
+			doc:id="672166b0-b8e2-49a4-9ebc-191b981276f3"
+			message='#[%dw 2.0&#10;output application/json&#10;---&#10;attributes]' />
+		<logger level="INFO" doc:name="Auth Process Ended"
+			doc:id="f0d8a320-69e7-4f78-b3cd-7dd55c02710c"
+			message="custome strategy, auth process exectuion complited" />
+		<logger level="INFO" doc:name="Auth Process Ended"
+			doc:id="dd65beb0-be0a-46fb-9ae7-62cd4c42a5a2"
+			message="custome strategy, auth process exectuion complited" />
+		<validation:matches-regex doc:name="Matches regex" doc:id="c19ff354-9bb1-436e-b2bd-9b97be720f11" />
+	</sub-flow>
+
+
+
+</mule>
